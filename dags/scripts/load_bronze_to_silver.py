@@ -197,3 +197,4 @@ def process_entity(entity_name: str):
                 bigquery.ScalarQueryParameter("rows_loaded", "INT64", 0),
                 bigquery.ScalarQueryParameter("run_ts", "TIMESTAMP", run_ts),
                 bigquery.ScalarQueryParameter("status", "STRING", "FAILED"),
+]
