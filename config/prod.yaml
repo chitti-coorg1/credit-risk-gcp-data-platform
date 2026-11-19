@@ -1,3 +1,0 @@
-project_id: "chitti-data-prod"
-bronze_bucket: "chitti-data-prod-bronze"
-region: "asia-south1"
