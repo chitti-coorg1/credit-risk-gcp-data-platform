@@ -8,6 +8,6 @@ steps:
         DAGS_BUCKET=$(gcloud composer environments describe credit-risk-composer-dev \
           --location=asia-south1 \
           --format="value(config.dagGcsPrefix)")
-        gcloud storage rsync --recursive --delete-unmatched-destination-objects dags/ "$$DAGS_BUCKET/"
+        gcloud storage rsync --recursive --delete-unmatched-destination-objects dags "$$DAGS_BUCKET"
 options:
   logging: CLOUD_LOGGING_ONLY
