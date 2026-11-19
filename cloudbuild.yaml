@@ -1,5 +1,5 @@
 steps:
-  - name: 'gcr.io/://google.com'
+  - name: 'google/cloud-sdk:slim'
     entrypoint: 'bash'
     args:
       - '-c'
