@@ -12,7 +12,7 @@ ENTITY_QUERIES = {
         "table": f"{PROJECT_ID}.silver.customers",
         "sql": f"""
             CREATE OR REPLACE EXTERNAL TABLE `{PROJECT_ID}.silver.ext_customers`
-            OPTIONS (format = 'CSV', uris = ['{BRONZE_BUCKET}/customer*.csv'], skip_leading_rows = 1);
+            OPTIONS (format = "CSV", uris = ["{BRONZE_BUCKET}/customer*.csv"], skip_leading_rows = 1);
 
             CREATE OR REPLACE TABLE `{PROJECT_ID}.silver.customers`
             CLUSTER BY customer_id, region AS
@@ -35,7 +35,7 @@ ENTITY_QUERIES = {
         "table": f"{PROJECT_ID}.silver.loans",
         "sql": f"""
             CREATE OR REPLACE EXTERNAL TABLE `{PROJECT_ID}.silver.ext_loans`
-            OPTIONS (format = 'CSV', uris = ['{BRONZE_BUCKET}/loan*.csv'], skip_leading_rows = 1);
+            OPTIONS (format = "CSV", uris = ["{BRONZE_BUCKET}/loan*.csv"], skip_leading_rows = 1);
 
             CREATE OR REPLACE TABLE `{PROJECT_ID}.silver.loans`
             PARTITION BY origination_date
@@ -61,7 +61,7 @@ ENTITY_QUERIES = {
         "table": f"{PROJECT_ID}.silver.collateral",
         "sql": f"""
             CREATE OR REPLACE EXTERNAL TABLE `{PROJECT_ID}.silver.ext_collateral`
-            OPTIONS (format = 'CSV', uris = ['{BRONZE_BUCKET}/collateral*.csv'], skip_leading_rows = 1);
+            OPTIONS (format = "CSV", uris = ["{BRONZE_BUCKET}/collateral*.csv"], skip_leading_rows = 1);
 
             CREATE OR REPLACE TABLE `{PROJECT_ID}.silver.collateral`
             CLUSTER BY loan_id AS
@@ -82,7 +82,7 @@ ENTITY_QUERIES = {
         "table": f"{PROJECT_ID}.silver.repayments",
         "sql": f"""
             CREATE OR REPLACE EXTERNAL TABLE `{PROJECT_ID}.silver.ext_repayments`
-            OPTIONS (format = 'CSV', uris = ['{BRONZE_BUCKET}/repayment*.csv'], skip_leading_rows = 1);
+            OPTIONS (format = "CSV", uris = ["{BRONZE_BUCKET}/repayment*.csv"], skip_leading_rows = 1);
 
             CREATE OR REPLACE TABLE `{PROJECT_ID}.silver.repayments`
             PARTITION BY due_date
@@ -90,15 +90,15 @@ ENTITY_QUERIES = {
             SELECT
               TRIM(loan_id) AS loan_id,
               SAFE_CAST(TRIM(due_date) AS DATE) AS due_date,
-              SAFE_CAST(NULLIF(TRIM(paid_date), '') AS DATE) AS paid_date,
+              SAFE_CAST(NULLIF(TRIM(paid_date), "") AS DATE) AS paid_date,
               SAFE_CAST(TRIM(dpd) AS INT64) AS dpd,
               SAFE_CAST(TRIM(amount_paid) AS NUMERIC) AS amount_paid,
               CASE
-                WHEN SAFE_CAST(TRIM(dpd) AS INT64) = 0 THEN 'Current'
-                WHEN SAFE_CAST(TRIM(dpd) AS INT64) BETWEEN 1 AND 30 THEN 'SMA-0 (1-30 DPD)'
-                WHEN SAFE_CAST(TRIM(dpd) AS INT64) BETWEEN 31 AND 60 THEN 'SMA-1 (31-60 DPD)'
-                WHEN SAFE_CAST(TRIM(dpd) AS INT64) BETWEEN 61 AND 90 THEN 'SMA-2 (61-90 DPD)'
-                ELSE 'NPA (>90 DPD)'
+                WHEN SAFE_CAST(TRIM(dpd) AS INT64) = 0 THEN "Current"
+                WHEN SAFE_CAST(TRIM(dpd) AS INT64) BETWEEN 1 AND 30 THEN "SMA-0 (1-30 DPD)"
+                WHEN SAFE_CAST(TRIM(dpd) AS INT64) BETWEEN 31 AND 60 THEN "SMA-1 (31-60 DPD)"
+                WHEN SAFE_CAST(TRIM(dpd) AS INT64) BETWEEN 61 AND 90 THEN "SMA-2 (61-90 DPD)"
+                ELSE "NPA (>90 DPD)"
               END AS delinquency_bucket,
               _FILE_NAME AS _bronze_source_file,
               CURRENT_TIMESTAMP() AS _silver_loaded_at
@@ -112,7 +112,7 @@ ENTITY_QUERIES = {
         "table": f"{PROJECT_ID}.silver.defaults_recoveries",
         "sql": f"""
             CREATE OR REPLACE EXTERNAL TABLE `{PROJECT_ID}.silver.ext_defaults`
-            OPTIONS (format = 'CSV', uris = ['{BRONZE_BUCKET}/default*.csv'], skip_leading_rows = 1);
+            OPTIONS (format = "CSV", uris = ["{BRONZE_BUCKET}/default*.csv"], skip_leading_rows = 1);
 
             CREATE OR REPLACE TABLE `{PROJECT_ID}.silver.defaults_recoveries`
             PARTITION BY default_date
@@ -122,7 +122,7 @@ ENTITY_QUERIES = {
               SAFE_CAST(TRIM(default_date) AS DATE) AS default_date,
               SAFE_CAST(TRIM(write_off_amount) AS NUMERIC) AS write_off_amount,
               SAFE_CAST(TRIM(recovery_amount) AS NUMERIC) AS recovery_amount,
-              SAFE_CAST(NULLIF(TRIM(recovery_date), '') AS DATE) AS recovery_date,
+              SAFE_CAST(NULLIF(TRIM(recovery_date), "") AS DATE) AS recovery_date,
               (SAFE_CAST(TRIM(write_off_amount) AS NUMERIC) - COALESCE(SAFE_CAST(TRIM(recovery_amount) AS NUMERIC), 0)) AS net_loss_amount,
               _FILE_NAME AS _bronze_source_file,
               CURRENT_TIMESTAMP() AS _silver_loaded_at
@@ -136,7 +136,7 @@ ENTITY_QUERIES = {
         "table": f"{PROJECT_ID}.silver.macro_indicators",
         "sql": f"""
             CREATE OR REPLACE EXTERNAL TABLE `{PROJECT_ID}.silver.ext_macro`
-            OPTIONS (format = 'CSV', uris = ['{BRONZE_BUCKET}/macro*.csv'], skip_leading_rows = 1);
+            OPTIONS (format = "CSV", uris = ["{BRONZE_BUCKET}/macro*.csv"], skip_leading_rows = 1);
 
             CREATE OR REPLACE TABLE `{PROJECT_ID}.silver.macro_indicators`
             PARTITION BY as_of_date AS
@@ -156,45 +156,34 @@ ENTITY_QUERIES = {
 }
 
 
-def process_entity(entity_name: str):
-    """Loads raw CSV from Bronze GCS into BigQuery Silver table and logs audit metrics."""
-    client = bigquery.Client(project=PROJECT_ID, location="asia-south1")
-    config = ENTITY_QUERIES[entity_name]
-    run_id = str(uuid.uuid4())
-    run_ts = datetime.now(timezone.utc)
-
+def write_audit(client, run_id, entity_name, file_name, target_table, rows_loaded, run_ts, status, err_msg=None):
     audit_sql = f"""
         INSERT INTO `{PROJECT_ID}.metadata.etl_audit_log`
         (run_id, entity_name, file_name, target_table, rows_loaded, run_ts, status, error_message)
         VALUES (@run_id, @entity_name, @file_name, @target_table, @rows_loaded, @run_ts, @status, @error_message)
     """
+    params = [
+        bigquery.ScalarQueryParameter("run_id", "STRING", run_id),
+        bigquery.ScalarQueryParameter("entity_name", "STRING", entity_name),
+        bigquery.ScalarQueryParameter("file_name", "STRING", file_name),
+        bigquery.ScalarQueryParameter("target_table", "STRING", target_table),
+        bigquery.ScalarQueryParameter("rows_loaded", "INT64", rows_loaded),
+        bigquery.ScalarQueryParameter("run_ts", "TIMESTAMP", run_ts),
+        bigquery.ScalarQueryParameter("status", "STRING", status),
+        bigquery.ScalarQueryParameter("error_message", "STRING", err_msg),
+    ]
+    client.query(audit_sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
 
+
+def process_entity(entity_name: str):
+    client = bigquery.Client(project=PROJECT_ID, location="asia-south1")
+    config = ENTITY_QUERIES[entity_name]
+    run_id = str(uuid.uuid4())
+    run_ts = datetime.now(timezone.utc)
     try:
         client.query(config["sql"]).result()
         row_count = client.get_table(config["table"]).num_rows
-
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("run_id", "STRING", run_id),
-                bigquery.ScalarQueryParameter("entity_name", "STRING", entity_name),
-                bigquery.ScalarQueryParameter("file_name", "STRING", config["uri"]),
-                bigquery.ScalarQueryParameter("target_table", "STRING", config["table"]),
-                bigquery.ScalarQueryParameter("rows_loaded", "INT64", row_count),
-                bigquery.ScalarQueryParameter("run_ts", "TIMESTAMP", run_ts),
-                bigquery.ScalarQueryParameter("status", "STRING", "SUCCESS"),
-                bigquery.ScalarQueryParameter("error_message", "STRING", None),
-            ]
-        )
-        client.query(audit_sql, job_config=job_config).result()
-
+        write_audit(client, run_id, entity_name, config["uri"], config["table"], row_count, run_ts, "SUCCESS", None)
     except Exception as exc:
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("run_id", "STRING", run_id),
-                bigquery.ScalarQueryParameter("entity_name", "STRING", entity_name),
-                bigquery.ScalarQueryParameter("file_name", "STRING", config["uri"]),
-                bigquery.ScalarQueryParameter("target_table", "STRING", config["table"]),
-                bigquery.ScalarQueryParameter("rows_loaded", "INT64", 0),
-                bigquery.ScalarQueryParameter("run_ts", "TIMESTAMP", run_ts),
-                bigquery.ScalarQueryParameter("status", "STRING", "FAILED"),
-]
+        write_audit(client, run_id, entity_name, config["uri"], config["table"], 0, run_ts, "FAILED", str(exc)[:1000])
+        raise
