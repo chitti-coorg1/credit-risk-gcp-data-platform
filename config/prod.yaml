@@ -1,0 +1,7 @@
+environment: prod
+project_id: chitti-data-prod
+region: asia-south1
+bronze_bucket: chitti-data-prod-bronze
+silver_dataset: silver
+metadata_dataset: metadata
+composer_env: credit-risk-composer-prod
